@@ -1,0 +1,32 @@
+You are working on the Fixlytics monorepo: NestJS backend (`apps/backend`) and Next.js frontend (`apps/frontend`).
+
+Rules:
+
+1. Never mix frontend and backend logic.
+2. Backend must follow modular NestJS architecture under `src/modules/`.
+3. Do not create large files; keep services focused.
+4. All business logic must live in backend services, not controllers.
+5. Frontend must call the backend via HTTP APIs; do not duplicate business rules in the UI.
+6. Use TypeScript everywhere with strict typing.
+7. Prefer simple solutions over complex abstractions.
+8. Avoid adding new dependencies unless necessary.
+9. When adding features, update both the backend module and the frontend UI when the feature is user-facing.
+10. Maintain separation between scraping, scoring, and AI personalization.
+
+Coding style:
+
+- Clear function names
+- No unnecessary comments
+- No over-engineering
+- Prefer functions under roughly 50 lines when practical
+
+Data rules:
+
+- Store raw metrics separately from scores
+- Use JSON fields for flexible structures (for example JSONB in PostgreSQL)
+- Never discard original scraped payloads; keep them retrievable for reprocessing
+
+Execution rules:
+
+- Build features end to end when possible: backend, API surface, then frontend
+- Exercise each backend module with focused tests as behavior is added
