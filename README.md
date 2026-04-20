@@ -109,6 +109,12 @@ This repository is a **pnpm** workspace.
 | `infra/docker` | Docker and compose assets |
 | `infra/nginx` | Reverse-proxy configuration |
 
+### Planning
+
+- **[Execution plan](docs/EXECUTION_PLAN.md)** — phased backend/frontend roadmap, security checks, and testing expectations.
+
+**Implemented so far (Phases 0–1 scaffold):** validated env + `/api/v1` + Helmet/CORS + global validation; PostgreSQL + Prisma (`User`, `RefreshToken`); JWT access + opaque refresh (hashed at rest); throttled auth endpoints; frontend login/register + sessionStorage tokens + protected `/dashboard`; Jest tests (`pnpm test`). Run `pnpm --filter @fixlytics/backend db:migrate` after configuring `DATABASE_URL`.
+
 ### Prerequisites
 
 - **Node.js** 20 or newer

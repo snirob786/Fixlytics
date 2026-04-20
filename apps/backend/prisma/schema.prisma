@@ -7,4 +7,99 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Domain models will be added in a later phase.
+enum SearchSource {
+  GOOGLE
+  MAPS
+  DIRECTORY
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  refreshTokens RefreshToken[]
+  searches      SavedSearch[]
+  jobRuns       JobRun[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model SavedSearch {
+  id         String        @id @default(cuid())
+  userId     String        @map("user_id")
+  keyword    String
+  location   String
+  source     SearchSource
+  cursorPage Int?          @map("cursor_page")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caches     SearchPageCache[]
+  leads      Lead[]
+
+  @@index([userId])
+}
+
+model SearchPageCache {
+  id         String      @id @default(cuid())
+  searchId   String      @map("search_id")
+  userId     String      @map("user_id")
+  pageIndex  Int         @map("page_index")
+  rawPayload Json        @map("raw_payload")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  search     SavedSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+
+  @@unique([searchId, pageIndex])
+  @@index([userId])
+}
+
+model Lead {
+  id        String      @id @default(cuid())
+  searchId  String      @map("search_id")
+  userId    String      @map("user_id")
+  url       String
+  title     String?
+  createdAt DateTime    @default(now()) @map("created_at")
+  search    SavedSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  analysis  Analysis?
+
+  @@unique([searchId, url])
+  @@index([searchId])
+  @@index([userId])
+}
+
+model Analysis {
+  id             String   @id @default(cuid())
+  leadId         String   @unique @map("lead_id")
+  userId         String   @map("user_id")
+  scrapedPayload Json     @map("scraped_payload")
+  rawMetrics     Json     @map("raw_metrics")
+  categoryScores Json     @map("category_scores")
+  checks         Json     @map("checks")
+  createdAt      DateTime @default(now()) @map("created_at")
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model JobRun {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  kind      String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}

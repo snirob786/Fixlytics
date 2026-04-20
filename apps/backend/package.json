@@ -4,29 +4,62 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "dev": "pnpm run dev:compile-once && concurrently -k -n compile,api -c cyan,green \"pnpm run dev:compile\" \"pnpm run dev:serve\"",
+    "dev": "pnpm run dev:compile-once && concurrently --kill-others-on-fail -n compile,api -c cyan,green \"pnpm run dev:compile\" \"pnpm run dev:serve\"",
     "dev:compile-once": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "dev:compile": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "dev:serve": "nodemon",
     "start": "node dist/main.js",
-    "lint": "tsc -p tsconfig.build.json --noEmit"
+    "lint": "tsc -p tsconfig.build.json --noEmit",
+    "test": "jest --config jest.config.cjs",
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@nestjs/bullmq": "^10.2.3",
     "@nestjs/common": "^10.4.15",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^10.4.15",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/throttler": "^6.5.0",
+    "@prisma/client": "^6.19.3",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^5.74.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "cookie-parser": "^1.4.7",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.10.1",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",
     "@nestjs/schematics": "^10.2.3",
+    "@nestjs/testing": "^10.4.22",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.8",
     "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.10.2",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^7.2.0",
     "concurrently": "^9.1.2",
+    "jest": "^30.3.0",
     "nodemon": "^3.1.9",
-    "prisma": "^6.1.0",
+    "prisma": "^6.19.3",
     "rimraf": "^6.0.1",
+    "tsx": "^4.21.0",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.9",
     "typescript": "^5.7.2"
   }
 }

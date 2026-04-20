@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @fixlytics/backend --filter @fixlytics/frontend dev",
     "build": "pnpm -r build",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "test": "pnpm --filter @fixlytics/backend test"
   },
   "engines": {
     "node": ">=20"
