@@ -45,6 +45,7 @@ describe("SearchesService", () => {
       page: 1,
       pageSize: 50,
       recent: false,
+      underperformingOnly: false,
     });
   });
 
@@ -53,6 +54,7 @@ describe("SearchesService", () => {
       page: 1,
       pageSize: 5,
       recent: true,
+      underperformingOnly: false,
     });
   });
 

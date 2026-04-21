@@ -13,15 +13,19 @@ export default function DashboardPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <AppHeader />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <main className="relative mx-auto w-full max-w-5xl flex-1 px-4 py-10">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-20 top-0 h-56 w-56 rounded-full bg-primary/10 blur-3xl"
+        />
+        <div className="relative mb-10">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Signed in as <span className="font-medium text-foreground">{user?.email}</span>
           </p>
         </div>
 
-        <Card className="border-border/80 shadow-sm">
+        <Card className="relative border-border/70">
           <CardHeader>
             <CardTitle className="text-base">Saved searches</CardTitle>
             <CardDescription>

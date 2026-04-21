@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { fetchJson } from "@/lib/api-client";
+import { authLogout, authMe } from "@/lib/backend-api";
 
 type AuthContextValue = {
   user: UserPublic | null;
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const me = await fetchJson<UserPublic>("/auth/me");
+        const me = await authMe();
         if (!cancelled && gen === authRequestGen.current) setUser(me);
       } catch {
         if (!cancelled && gen === authRequestGen.current) setUser(null);
@@ -62,10 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetchJson<{ ok: boolean }>("/auth/logout", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
+      await authLogout({});
     } catch {
       // still clear local session
     }

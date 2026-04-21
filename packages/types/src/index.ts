@@ -61,6 +61,10 @@ export type LeadListItem = {
   createdAt: string;
   analysisId: string | null;
   analyzedAt: string | null;
+  /** Average of SEO / performance / design scores when analyzed; omitted when unknown. */
+  avgScore?: number | null;
+  /** Present when list was filtered to underperforming leads only. */
+  underperforming?: boolean;
 };
 
 export type LeadDetailResponse = {

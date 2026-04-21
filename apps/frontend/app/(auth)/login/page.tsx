@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { AuthSessionResponse } from "@fixlytics/types";
 import { useAuth } from "@/components/auth-provider";
 import { SiteHeader } from "@/components/site-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, fetchJson } from "@/lib/api-client";
+import { ApiError } from "@/lib/api-client";
+import { authLogin } from "@/lib/backend-api";
 
 export default function LoginPage() {
   const { login, user, ready, hydrated } = useAuth();
@@ -32,10 +32,7 @@ export default function LoginPage() {
     setError(null);
     setPending(true);
     try {
-      const data = await fetchJson<AuthSessionResponse>("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
+      const data = await authLogin({ email, password });
       login(data);
       router.replace("/dashboard");
     } catch (err) {
@@ -54,8 +51,16 @@ export default function LoginPage() {
           </Button>
         }
       />
-      <main className="flex flex-1 items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-md border-border/80 shadow-md">
+      <main className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-12">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-1/4 top-1/3 h-64 w-64 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute bottom-1/4 right-0 h-72 w-72 translate-x-1/3 rounded-full bg-cyan-500/12 blur-3xl dark:bg-cyan-400/10"
+        />
+        <Card className="relative w-full max-w-md border-border/70 shadow-xl shadow-black/[0.08] dark:shadow-black/40">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-semibold tracking-tight">Sign in</CardTitle>
             <CardDescription>Use your email and password to continue.</CardDescription>

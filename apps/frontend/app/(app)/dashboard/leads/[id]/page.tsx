@@ -9,7 +9,8 @@ import { AppHeader } from "@/components/app-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, fetchJson } from "@/lib/api-client";
+import { ApiError } from "@/lib/api-client";
+import { leadsGet } from "@/lib/backend-api";
 
 function JsonBlock({ value }: { value: unknown }) {
   return (
@@ -44,7 +45,7 @@ export default function LeadDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchJson<LeadDetailResponse>(`/leads/${id}`);
+        const res = await leadsGet(id);
         if (!cancelled) setLead(res);
       } catch (e) {
         if (!cancelled) setError(e instanceof ApiError ? e.message : "Failed to load lead");

@@ -8,7 +8,8 @@ import { AppHeader } from "@/components/app-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, fetchJson } from "@/lib/api-client";
+import { ApiError } from "@/lib/api-client";
+import { searchesList } from "@/lib/backend-api";
 
 const PAGE_SIZE = 5;
 
@@ -22,12 +23,11 @@ export default function SearchesPage() {
     setLoading(true);
     setError(null);
     try {
-      const qs = new URLSearchParams({
-        page: String(page),
-        pageSize: String(PAGE_SIZE),
-        recent: "true",
+      const res = await searchesList({
+        page,
+        pageSize: PAGE_SIZE,
+        recent: true,
       });
-      const res = await fetchJson<Paginated<SavedSearchListItem>>(`/searches?${qs.toString()}`);
       setData(res);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load searches");
@@ -46,10 +46,14 @@ export default function SearchesPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <AppHeader />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <main className="relative mx-auto w-full max-w-5xl flex-1 px-4 py-10">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 top-8 h-48 w-48 rounded-full bg-primary/10 blur-3xl"
+        />
+        <div className="relative mb-10 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Saved searches</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Saved searches</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Recent saved searches from the database ({PAGE_SIZE} per page). Enable{" "}
               <code className="rounded bg-muted px-1 py-0.5 text-xs">USE_JOB_QUEUE=true</code> with
@@ -68,7 +72,7 @@ export default function SearchesPage() {
           </Alert>
         ) : null}
 
-        <Card className="border-border/80 shadow-sm">
+        <Card className="relative border-border/70">
           <CardHeader>
             <CardTitle className="text-base">Recent searches</CardTitle>
             <CardDescription>
@@ -88,9 +92,9 @@ export default function SearchesPage() {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto rounded-md border border-border/80">
+                <div className="overflow-x-auto rounded-lg border border-border/70 bg-muted/20 shadow-inner shadow-black/[0.04] dark:bg-muted/10 dark:shadow-black/20">
                   <table className="w-full min-w-[640px] text-left text-sm">
-                    <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead className="bg-linear-to-b from-muted/80 to-muted/40 text-xs uppercase tracking-wide text-muted-foreground dark:from-muted/50 dark:to-muted/25">
                       <tr>
                         <th className="px-3 py-2 font-medium">Keyword</th>
                         <th className="px-3 py-2 font-medium">Location</th>

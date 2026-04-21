@@ -21,12 +21,15 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
   if (!ready || !hydrated) {
     return (
       <div className="flex min-h-screen flex-col">
-        <div className="border-b border-border/80 bg-card/80 backdrop-blur-sm">
+        <div className="border-b border-border/60 bg-background/70 shadow-sm backdrop-blur-xl">
           <div className="mx-auto h-14 max-w-5xl px-4" />
         </div>
-        <main className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12">
-          <div className="h-8 w-8 animate-pulse rounded-full border-2 border-muted border-t-primary" />
-          <p className="text-sm text-muted-foreground">Loading…</p>
+        <main className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-12">
+          <div className="relative">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/20 border-t-primary shadow-md shadow-primary/20" />
+            <div className="pointer-events-none absolute inset-0 rounded-full bg-primary/10 blur-xl" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Loading…</p>
         </main>
       </div>
     );

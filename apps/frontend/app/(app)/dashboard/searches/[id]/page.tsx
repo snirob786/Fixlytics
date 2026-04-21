@@ -11,7 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, fetchJson } from "@/lib/api-client";
+import { ApiError } from "@/lib/api-client";
+import {
+  searchesDelete,
+  searchesGet,
+  searchesListLeads,
+  searchesRun,
+  searchesUpdate,
+} from "@/lib/backend-api";
 import { cn } from "@/lib/utils";
 
 export default function SearchDetailPage() {
@@ -27,26 +34,34 @@ export default function SearchDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [underperformingOnly, setUnderperformingOnly] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [d, l] = await Promise.all([
-        fetchJson<SavedSearchDetail>(`/searches/${id}`),
-        fetchJson<Paginated<LeadListItem>>(`/searches/${id}/leads?page=1&pageSize=50`),
-      ]);
-      setDetail(d);
-      setKeyword(d.keyword);
-      setLocation(d.location);
-      setSource(d.source);
-      setLeads(l);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load search");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const load = useCallback(
+    async (opts?: { preserveError?: boolean }) => {
+      setLoading(true);
+      if (!opts?.preserveError) setError(null);
+      try {
+        const [d, l] = await Promise.all([
+          searchesGet(id),
+          searchesListLeads(id, {
+            page: 1,
+            pageSize: 50,
+            underperformingOnly,
+          }),
+        ]);
+        setDetail(d);
+        setKeyword(d.keyword);
+        setLocation(d.location);
+        setSource(d.source);
+        setLeads(l);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Failed to load search");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id, underperformingOnly],
+  );
 
   useEffect(() => {
     void load();
@@ -76,31 +91,37 @@ export default function SearchDetailPage() {
     );
   }, [detail]);
 
-  async function saveEdits() {
+  async function runSearch() {
     if (!detail) return;
-    setBusy("save");
+    setBusy("search");
     setError(null);
     try {
-      await fetchJson(`/searches/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ keyword, location, source }),
-      });
-      await load();
+      await searchesUpdate(id, { keyword, location, source });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not update search");
-    } finally {
+      setError(e instanceof ApiError ? e.message : "Could not save search parameters");
       setBusy(null);
+      return;
     }
+    try {
+      await searchesRun(id, false);
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Could not start search run";
+      await load({ preserveError: true });
+      setError(
+        `${msg} Parameters were saved. If the job queue is disabled, set USE_JOB_QUEUE=true and REDIS_URL, then try Search again.`,
+      );
+      setBusy(null);
+      return;
+    }
+    await load();
+    setBusy(null);
   }
 
-  async function runPipeline(resume: boolean) {
-    setBusy(resume ? "resume" : "run");
+  async function runPipelineResume() {
+    setBusy("resume");
     setError(null);
     try {
-      await fetchJson(`/searches/${id}/run`, {
-        method: "POST",
-        body: JSON.stringify({ resume }),
-      });
+      await searchesRun(id, true);
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not enqueue job");
@@ -116,7 +137,7 @@ export default function SearchDetailPage() {
     setBusy("delete");
     setError(null);
     try {
-      await fetchJson(`/searches/${id}`, { method: "DELETE" });
+      await searchesDelete(id);
       router.push("/dashboard/searches");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not delete search");
@@ -136,24 +157,17 @@ export default function SearchDetailPage() {
             </Button>
             <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Run processes one page at a time using the fixture scraper, caches the raw payload,
-              materializes leads, and enqueues analysis jobs automatically.
+              Use Search to save parameters and run discovery from page 0 for the selected source.
+              The worker uses the configured scraper (fixture by default), caches payloads, creates
+              leads, and scores them. Connect live Google or Maps in the scraper when you are ready.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="default"
-              disabled={!!busy}
-              onClick={() => void runPipeline(false)}
-            >
-              {busy === "run" ? "Starting…" : "Run from page 0"}
-            </Button>
-            <Button
-              type="button"
               variant="outline"
               disabled={!!busy}
-              onClick={() => void runPipeline(true)}
+              onClick={() => void runPipelineResume()}
             >
               {busy === "resume" ? "Resuming…" : "Resume from cursor"}
             </Button>
@@ -185,8 +199,11 @@ export default function SearchDetailPage() {
 
             <Card className="border-border/80 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Edit parameters</CardTitle>
-                <CardDescription>Changes apply to the next pipeline runs.</CardDescription>
+                <CardTitle className="text-base">Search parameters</CardTitle>
+                <CardDescription>
+                  Choose where this search targets (Google, Maps, or directory). Search saves these
+                  fields and starts a new run from page index 0.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -220,41 +237,53 @@ export default function SearchDetailPage() {
                       "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     )}
                   >
-                    {(["GOOGLE", "MAPS", "DIRECTORY"] as const).map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    <option value="GOOGLE">Google</option>
+                    <option value="MAPS">Maps</option>
+                    <option value="DIRECTORY">Directory</option>
                   </select>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="button" disabled={!!busy} onClick={() => void saveEdits()}>
-                    {busy === "save" ? "Saving…" : "Save changes"}
+                  <Button type="button" disabled={!!busy} onClick={() => void runSearch()}>
+                    {busy === "search" ? "Searching…" : "Search"}
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="border-border/80 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Leads</CardTitle>
-                <CardDescription>
-                  Open a lead to inspect structured checks. Text is rendered as plain data (no HTML
-                  injection from crawled content).
-                </CardDescription>
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-base">Results</CardTitle>
+                  <CardDescription>
+                    After analysis completes, filter to sites whose average category score is below
+                    the backend threshold (underperforming prospects).
+                  </CardDescription>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-input"
+                    checked={underperformingOnly}
+                    onChange={(e) => setUnderperformingOnly(e.target.checked)}
+                  />
+                  Underperforming only
+                </label>
               </CardHeader>
               <CardContent>
                 {!leads?.items.length ? (
                   <p className="text-sm text-muted-foreground">
-                    No leads yet. Run the pipeline to materialize fixture results.
+                    {underperformingOnly
+                      ? "No underperforming analyzed leads match this filter yet."
+                      : "No leads yet. Click Search to run discovery (requires job queue when enabled)."}
                   </p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border border-border/80">
-                    <table className="w-full min-w-[720px] text-left text-sm">
+                    <table className="w-full min-w-[800px] text-left text-sm">
                       <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2 font-medium">URL</th>
                           <th className="px-3 py-2 font-medium">Title</th>
+                          <th className="px-3 py-2 font-medium">Avg score</th>
                           <th className="px-3 py-2 font-medium">Analysis</th>
                           <th className="px-3 py-2 font-medium" />
                         </tr>
@@ -269,6 +298,21 @@ export default function SearchDetailPage() {
                             </td>
                             <td className="px-3 py-2 text-muted-foreground">
                               {l.title ?? "—"}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground tabular-nums">
+                              {l.avgScore != null ? (
+                                <span
+                                  className={
+                                    l.avgScore < 58
+                                      ? "font-medium text-amber-700 dark:text-amber-400"
+                                      : ""
+                                  }
+                                >
+                                  {l.avgScore.toFixed(1)}
+                                </span>
+                              ) : (
+                                "—"
+                              )}
                             </td>
                             <td className="px-3 py-2 text-muted-foreground">
                               {l.analysisId ? "Ready" : "Pending"}

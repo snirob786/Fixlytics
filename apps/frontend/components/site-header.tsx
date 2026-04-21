@@ -13,14 +13,14 @@ export function SiteHeader({
   return (
     <header
       className={cn(
-        "border-b border-border/80 bg-card/80 backdrop-blur-sm",
+        "sticky top-0 z-40 border-b border-border/60 bg-background/70 shadow-sm shadow-black/[0.03] backdrop-blur-xl dark:bg-background/55 dark:shadow-black/20",
         className,
       )}
     >
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <Link
           href="/"
-          className="text-sm font-semibold tracking-tight text-foreground hover:opacity-90"
+          className="text-sm font-bold tracking-tight text-brand transition-opacity hover:opacity-90"
         >
           Fixlytics
         </Link>

@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, fetchJson } from "@/lib/api-client";
+import { ApiError } from "@/lib/api-client";
+import { searchesCreate } from "@/lib/backend-api";
 import { cn } from "@/lib/utils";
 
 export default function NewSearchPage() {
@@ -28,10 +29,7 @@ export default function NewSearchPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await fetchJson<{ id: string }>("/searches", {
-        method: "POST",
-        body: JSON.stringify({ keyword, location, source }),
-      });
+      const created = await searchesCreate({ keyword, location, source });
       router.push(`/dashboard/searches/${created.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create search");

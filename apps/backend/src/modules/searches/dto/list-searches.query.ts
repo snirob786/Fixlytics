@@ -14,6 +14,17 @@ export class ListSearchesQuery {
   @IsBoolean()
   recent?: boolean;
 
+  /** When true (e.g. on `/searches/:id/leads`), only leads whose analysis average score is below the backend threshold. */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === "") return false;
+    if (value === true || value === 1) return true;
+    const s = String(value).trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  })
+  @IsBoolean()
+  underperformingOnly?: boolean;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
