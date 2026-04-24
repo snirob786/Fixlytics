@@ -1,13 +1,14 @@
 import { BullModule } from "@nestjs/bullmq";
 import { Logger, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { APP_FILTER, APP_GUARD } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import Redis from "ioredis";
 import { AppController } from "./app.controller";
 import { validateEnv } from "./config/validate-env";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
+import { RequestLoggingInterceptor } from "./common/interceptors/request-logging.interceptor";
 import { AuthModule } from "./modules/auth/auth.module";
 import { PipelineModule } from "./modules/jobs/pipeline.module";
 import { LeadsModule } from "./modules/leads/leads.module";
@@ -62,6 +63,7 @@ const useJobQueue = isJobQueueEnabled();
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })

@@ -1,5 +1,6 @@
-import { ForbiddenException, ServiceUnavailableException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, ServiceUnavailableException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { SearchRunStatus } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PipelineJobsService } from "../jobs/pipeline-jobs.service";
 import { SearchesService } from "./searches.service";
@@ -12,8 +13,14 @@ describe("SearchesService", () => {
     searchPageCache: {
       findFirst: jest.fn(),
     },
+    searchRun: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
   };
   const pipelineJobs = {
+    assertQuota: jest.fn().mockResolvedValue(undefined),
     enqueueScrapeSearch: jest.fn(),
   };
 
@@ -40,22 +47,11 @@ describe("SearchesService", () => {
     await expect(svc.enqueueRun("u1", "s1", false)).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
-  it("clamps list page size to max", () => {
-    expect(service.normalizeListQuery({ page: 1, pageSize: 999 } as never)).toEqual({
-      page: 1,
-      pageSize: 50,
-      recent: false,
-      underperformingOnly: false,
-    });
-  });
-
-  it("uses page size 5 by default when recent is true", () => {
-    expect(service.normalizeListQuery({ page: 1, recent: true } as never)).toEqual({
-      page: 1,
-      pageSize: 5,
-      recent: true,
-      underperformingOnly: false,
-    });
+  it("throws Conflict when a run is already queued or running", async () => {
+    prisma.savedSearch.findFirst.mockResolvedValueOnce({ id: "s1", userId: "u1" } as never);
+    prisma.searchRun.findFirst.mockResolvedValueOnce({ id: "run-block" } as never);
+    await expect(service.enqueueRun("u1", "s1", false)).rejects.toBeInstanceOf(ConflictException);
+    expect(pipelineJobs.enqueueScrapeSearch).not.toHaveBeenCalled();
   });
 
   it("rejects cache rows that do not match the authenticated user", async () => {
@@ -68,7 +64,7 @@ describe("SearchesService", () => {
     await expect(service.getCachedPage("u1", "s1", 0)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("returns cache when ownership matches", async () => {
+  it("returns cache payload when ownership matches (not truncated)", async () => {
     prisma.savedSearch.findFirst.mockResolvedValueOnce({ id: "s1" });
     prisma.searchPageCache.findFirst.mockResolvedValueOnce({
       userId: "u1",
@@ -76,6 +72,21 @@ describe("SearchesService", () => {
       rawPayload: { ok: true },
     });
     const res = await service.getCachedPage("u1", "s1", 0);
-    expect(res.rawPayload).toEqual({ ok: true });
+    expect(res).toEqual({ pageIndex: 0, truncated: false, rawPayload: { ok: true } });
+  });
+
+  it("marks run failed and rethrows when enqueue fails", async () => {
+    prisma.savedSearch.findFirst.mockResolvedValue({ id: "s1", userId: "u1" } as never);
+    prisma.searchRun.findFirst.mockResolvedValue(null);
+    prisma.searchRun.create.mockResolvedValue({ id: "run1" } as never);
+    pipelineJobs.enqueueScrapeSearch.mockRejectedValueOnce(new Error("redis down"));
+    await expect(service.enqueueRun("u1", "s1", false)).rejects.toThrow("redis down");
+    expect(prisma.searchRun.update).toHaveBeenCalledWith({
+      where: { id: "run1" },
+      data: expect.objectContaining({
+        status: SearchRunStatus.FAILED,
+        error: expect.stringContaining("redis down"),
+      }),
+    });
   });
 });

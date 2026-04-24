@@ -1,18 +1,44 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { Prisma, type SavedSearch } from "@prisma/client";
+import { Prisma, SearchRunStatus, type SavedSearch } from "@prisma/client";
+import { buildPaginated, type PaginatedResponse } from "../../common/dto/paginated-response";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PipelineJobsService } from "../jobs/pipeline-jobs.service";
+import { MAX_SEARCH_RUN_ERROR_LENGTH } from "../jobs/pipeline.constants";
+import { toCachedPageResponse } from "./mappers/cache-page.mapper";
+import {
+  toLeadListItemResponse,
+  type LeadListItemResponseDto,
+} from "../leads/mappers/lead.mapper";
+import {
+  toSavedSearchCreateResponse,
+  toSavedSearchDetailResponse,
+  toSavedSearchResponse,
+  toSavedSearchSummaryResponse,
+  type SavedSearchDetailResponseDto,
+  type SavedSearchResponseDto,
+  type SavedSearchSummaryResponseDto,
+} from "./mappers/saved-search.mapper";
+import { toSearchRunResponse, type SearchRunResponseDto } from "./mappers/search-run.mapper";
 import { CreateSearchDto } from "./dto/create-search.dto";
-import { ListSearchesQuery, MAX_SEARCH_LIST_PAGE_SIZE } from "./dto/list-searches.query";
+import { normalizeSavedSearchListQuery, type ListSavedSearchesQuery } from "./dto/list-saved-searches.query";
+import { normalizeSearchLeadsQuery, type ListSearchLeadsQuery } from "./dto/list-search-leads.query";
+import { normalizeSearchRunsQuery, type ListSearchRunsQuery } from "./dto/list-search-runs.query";
 import { UpdateSearchDto } from "./dto/update-search.dto";
 
 const UNDERPERFORMING_AVG_THRESHOLD = 58;
+
+function truncateRunError(message: string): string {
+  const m = message.trim();
+  if (m.length <= MAX_SEARCH_RUN_ERROR_LENGTH) return m;
+  return `${m.slice(0, MAX_SEARCH_RUN_ERROR_LENGTH - 1)}…`;
+}
 
 function avgCategoryScore(categoryScores: unknown): number | null {
   if (!categoryScores || typeof categoryScores !== "object") return null;
@@ -31,23 +57,8 @@ export class SearchesService {
     @Optional() private readonly pipelineJobs?: PipelineJobsService,
   ) {}
 
-  normalizeListQuery(query: ListSearchesQuery): {
-    page: number;
-    pageSize: number;
-    recent: boolean;
-    underperformingOnly: boolean;
-  } {
-    const recent = !!query.recent;
-    const underperformingOnly = !!query.underperformingOnly;
-    const page = Math.max(1, query.page ?? 1);
-    const defaultPageSize = recent ? 5 : 20;
-    const raw = query.pageSize ?? defaultPageSize;
-    const pageSize = Math.min(MAX_SEARCH_LIST_PAGE_SIZE, Math.max(1, raw));
-    return { page, pageSize, recent, underperformingOnly };
-  }
-
-  async create(userId: string, dto: CreateSearchDto): Promise<SavedSearch> {
-    return this.prisma.savedSearch.create({
+  async create(userId: string, dto: CreateSearchDto): Promise<SavedSearchSummaryResponseDto> {
+    const row = await this.prisma.savedSearch.create({
       data: {
         userId,
         keyword: dto.keyword.trim(),
@@ -55,10 +66,14 @@ export class SearchesService {
         source: dto.source,
       },
     });
+    return toSavedSearchCreateResponse(row);
   }
 
-  async list(userId: string, query: ListSearchesQuery) {
-    const { page, pageSize } = this.normalizeListQuery(query);
+  async list(
+    userId: string,
+    query: ListSavedSearchesQuery,
+  ): Promise<PaginatedResponse<SavedSearchSummaryResponseDto>> {
+    const { page, pageSize } = normalizeSavedSearchListQuery(query);
     const where: Prisma.SavedSearchWhereInput = { userId };
     const [items, total] = await Promise.all([
       this.prisma.savedSearch.findMany({
@@ -72,21 +87,12 @@ export class SearchesService {
       }),
       this.prisma.savedSearch.count({ where }),
     ]);
-    return {
-      items: items.map((s) => ({
-        id: s.id,
-        keyword: s.keyword,
-        location: s.location,
-        source: s.source,
-        cursorPage: s.cursorPage,
-        createdAt: s.createdAt.toISOString(),
-        updatedAt: s.updatedAt.toISOString(),
-        leadCount: s._count.leads,
-      })),
+    return buildPaginated(
+      items.map((s) => toSavedSearchSummaryResponse(s)),
       page,
       pageSize,
       total,
-    };
+    );
   }
 
   async getOwnedOrThrow(userId: string, id: string): Promise<SavedSearch> {
@@ -99,7 +105,7 @@ export class SearchesService {
     return search;
   }
 
-  async getDetail(userId: string, id: string) {
+  async getDetail(userId: string, id: string): Promise<SavedSearchDetailResponseDto> {
     const search = await this.prisma.savedSearch.findFirst({
       where: { id, userId },
       include: {
@@ -109,22 +115,12 @@ export class SearchesService {
     if (!search) {
       throw new NotFoundException("Search not found");
     }
-    return {
-      id: search.id,
-      keyword: search.keyword,
-      location: search.location,
-      source: search.source,
-      cursorPage: search.cursorPage,
-      createdAt: search.createdAt.toISOString(),
-      updatedAt: search.updatedAt.toISOString(),
-      leadCount: search._count.leads,
-      cachedPages: search._count.caches,
-    };
+    return toSavedSearchDetailResponse(search);
   }
 
-  async update(userId: string, id: string, dto: UpdateSearchDto): Promise<SavedSearch> {
+  async update(userId: string, id: string, dto: UpdateSearchDto): Promise<SavedSearchResponseDto> {
     await this.getOwnedOrThrow(userId, id);
-    return this.prisma.savedSearch.update({
+    const row = await this.prisma.savedSearch.update({
       where: { id },
       data: {
         ...(dto.keyword !== undefined ? { keyword: dto.keyword.trim() } : {}),
@@ -132,6 +128,7 @@ export class SearchesService {
         ...(dto.source !== undefined ? { source: dto.source } : {}),
       },
     });
+    return toSavedSearchResponse(row);
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -139,20 +136,97 @@ export class SearchesService {
     await this.prisma.savedSearch.delete({ where: { id } });
   }
 
-  async enqueueRun(userId: string, id: string, resume: boolean): Promise<{ ok: true }> {
+  async enqueueRun(userId: string, id: string, resume: boolean): Promise<{ runId: string }> {
     await this.getOwnedOrThrow(userId, id);
     if (!this.pipelineJobs) {
       throw new ServiceUnavailableException(
         "Job queue is disabled (set USE_JOB_QUEUE=true and REDIS_URL, then restart). Saved searches are still stored in the database.",
       );
     }
-    await this.pipelineJobs.enqueueScrapeSearch(userId, id, resume);
-    return { ok: true as const };
+
+    const blocking = await this.prisma.searchRun.findFirst({
+      where: {
+        searchId: id,
+        status: { in: [SearchRunStatus.QUEUED, SearchRunStatus.RUNNING] },
+      },
+    });
+    if (blocking) {
+      throw new ConflictException(
+        "A scrape run is already queued or in progress for this search. Wait for it to finish or fail before starting another.",
+      );
+    }
+
+    await this.pipelineJobs.assertQuota(userId);
+
+    const run = await this.prisma.searchRun.create({
+      data: { searchId: id, status: SearchRunStatus.QUEUED },
+    });
+
+    try {
+      const job = await this.pipelineJobs.enqueueScrapeSearch(userId, id, resume, run.id);
+      await this.prisma.searchRun.update({
+        where: { id: run.id },
+        data: { jobId: job.id != null ? String(job.id) : null },
+      });
+      return { runId: run.id };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.prisma.searchRun.update({
+        where: { id: run.id },
+        data: {
+          status: SearchRunStatus.FAILED,
+          finishedAt: new Date(),
+          error: truncateRunError(msg),
+        },
+      });
+      throw err;
+    }
   }
 
-  async listLeads(userId: string, searchId: string, query: ListSearchesQuery) {
+  async getLatestRunStatus(
+    userId: string,
+    searchId: string,
+  ): Promise<{ latestRun: SearchRunResponseDto | null }> {
     await this.getOwnedOrThrow(userId, searchId);
-    const { page, pageSize, underperformingOnly } = this.normalizeListQuery(query);
+    const latest = await this.prisma.searchRun.findFirst({
+      where: { searchId },
+      orderBy: { createdAt: "desc" },
+    });
+    return { latestRun: latest ? toSearchRunResponse(latest) : null };
+  }
+
+  async listSearchRuns(
+    userId: string,
+    searchId: string,
+    query: ListSearchRunsQuery,
+  ): Promise<PaginatedResponse<SearchRunResponseDto>> {
+    await this.getOwnedOrThrow(userId, searchId);
+    const { page, pageSize } = normalizeSearchRunsQuery(query);
+    const where = { searchId };
+    const [rows, total] = await Promise.all([
+      this.prisma.searchRun.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.searchRun.count({ where }),
+    ]);
+    return buildPaginated(
+      rows.map((r) => toSearchRunResponse(r)),
+      page,
+      pageSize,
+      total,
+    );
+  }
+
+  async listLeads(
+    userId: string,
+    searchId: string,
+    query: ListSearchLeadsQuery,
+  ): Promise<PaginatedResponse<LeadListItemResponseDto>> {
+    await this.getOwnedOrThrow(userId, searchId);
+    const { page, pageSize, underperformingOnly } = normalizeSearchLeadsQuery(query);
     const skip = (page - 1) * pageSize;
     const threshold = UNDERPERFORMING_AVG_THRESHOLD;
 
@@ -191,7 +265,7 @@ export class SearchesService {
       );
       const ids = idRows.map((r) => r.id);
       if (ids.length === 0) {
-        return { items: [], page, pageSize, total };
+        return buildPaginated([], page, pageSize, total);
       }
       const leads = await this.prisma.lead.findMany({
         where: { id: { in: ids }, userId, searchId },
@@ -199,26 +273,17 @@ export class SearchesService {
           analysis: { select: { id: true, createdAt: true, categoryScores: true } },
         },
       });
-      const order = new Map(ids.map((id, i) => [id, i] as const));
+      const order = new Map(ids.map((rid, i) => [rid, i] as const));
       leads.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-      return {
-        items: leads.map((l) => {
+      return buildPaginated(
+        leads.map((l) => {
           const avg = avgCategoryScore(l.analysis?.categoryScores);
-          return {
-            id: l.id,
-            url: l.url,
-            title: l.title,
-            createdAt: l.createdAt.toISOString(),
-            analysisId: l.analysis?.id ?? null,
-            analyzedAt: l.analysis?.createdAt.toISOString() ?? null,
-            avgScore: avg,
-            underperforming: true,
-          };
+          return toLeadListItemResponse(l, { avgScore: avg, underperforming: true });
         }),
         page,
         pageSize,
         total,
-      };
+      );
     }
 
     const where = { searchId, userId };
@@ -234,20 +299,14 @@ export class SearchesService {
       }),
       this.prisma.lead.count({ where }),
     ]);
-    return {
-      items: items.map((l) => ({
-        id: l.id,
-        url: l.url,
-        title: l.title,
-        createdAt: l.createdAt.toISOString(),
-        analysisId: l.analysis?.id ?? null,
-        analyzedAt: l.analysis?.createdAt.toISOString() ?? null,
-        avgScore: avgCategoryScore(l.analysis?.categoryScores),
-      })),
+    return buildPaginated(
+      items.map((l) =>
+        toLeadListItemResponse(l, { avgScore: avgCategoryScore(l.analysis?.categoryScores) }),
+      ),
       page,
       pageSize,
       total,
-    };
+    );
   }
 
   async getCachedPage(userId: string, searchId: string, pageIndex: number) {
@@ -267,6 +326,6 @@ export class SearchesService {
     if (row.userId !== userId) {
       throw new ForbiddenException();
     }
-    return { pageIndex: row.pageIndex, rawPayload: row.rawPayload };
+    return toCachedPageResponse(row.pageIndex, row.rawPayload);
   }
 }

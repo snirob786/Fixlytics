@@ -40,6 +40,7 @@ export type Paginated<T> = {
   page: number;
   pageSize: number;
   total: number;
+  hasNext: boolean;
 };
 
 export type SavedSearchDetail = {

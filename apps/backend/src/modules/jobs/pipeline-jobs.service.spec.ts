@@ -24,7 +24,7 @@ describe("PipelineJobsService", () => {
 
     const service = moduleRef.get(PipelineJobsService);
     try {
-      await service.enqueueScrapeSearch("u1", "s1", true);
+      await service.enqueueScrapeSearch("u1", "s1", true, `c${"a".repeat(24)}`);
       throw new Error("expected HttpException");
     } catch (e) {
       expect(e).toBeInstanceOf(HttpException);

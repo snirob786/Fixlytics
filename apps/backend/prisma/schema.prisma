@@ -13,6 +13,13 @@ enum SearchSource {
   DIRECTORY
 }
 
+enum SearchRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -48,8 +55,24 @@ model SavedSearch {
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   caches     SearchPageCache[]
   leads      Lead[]
+  runs       SearchRun[]
 
   @@index([userId])
+}
+
+model SearchRun {
+  id         String          @id @default(cuid())
+  searchId   String          @map("search_id")
+  status     SearchRunStatus
+  startedAt  DateTime?       @map("started_at")
+  finishedAt DateTime?       @map("finished_at")
+  error      String?
+  jobId      String?         @map("job_id")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  search     SavedSearch     @relation(fields: [searchId], references: [id], onDelete: Cascade)
+
+  @@index([searchId])
+  @@index([searchId, status])
 }
 
 model SearchPageCache {
