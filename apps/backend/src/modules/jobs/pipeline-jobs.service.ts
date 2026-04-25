@@ -3,14 +3,7 @@ import { InjectQueue } from "@nestjs/bullmq";
 import type { Job } from "bullmq";
 import { Queue } from "bullmq";
 import { PrismaService } from "../../prisma/prisma.service";
-import {
-  DAILY_JOB_RUN_LIMIT,
-  JOB_ANALYZE_LEAD,
-  JOB_SCRAPE_SEARCH,
-  PIPELINE_QUEUE,
-  type AnalyzeLeadJobData,
-  type ScrapeSearchJobData,
-} from "./pipeline.constants";
+import { DAILY_JOB_RUN_LIMIT, PIPELINE_QUEUE, type ScrapeSearchJobData } from "./pipeline.constants";
 
 @Injectable()
 export class PipelineJobsService implements OnModuleInit {
@@ -46,26 +39,32 @@ export class PipelineJobsService implements OnModuleInit {
   }
 
   async enqueueScrapeSearch(
-    userId: string,
-    searchId: string,
-    resume: boolean,
-    searchRunId: string,
+    _userId: string,
+    _searchId: string,
+    _resume: boolean,
+    _searchRunId: string,
   ): Promise<Job<ScrapeSearchJobData, unknown, string>> {
-    await this.assertQuota(userId);
-    const job = await this.pipeline.add(
-      JOB_SCRAPE_SEARCH,
-      { searchId, userId, resume, searchRunId } satisfies ScrapeSearchJobData,
-      { removeOnComplete: 500, removeOnFail: 500 },
-    );
-    await this.recordJobRun(userId, JOB_SCRAPE_SEARCH);
-    return job;
+    throw new HttpException("Async pipeline disabled. Use /explore/search", HttpStatus.NOT_IMPLEMENTED);
+
+    // TODO: re-enable when BullMQ pipeline is wired again
+    // await this.assertQuota(userId);
+    // const job = await this.pipeline.add(
+    //   JOB_SCRAPE_SEARCH,
+    //   { searchId, userId, resume, searchRunId } satisfies ScrapeSearchJobData,
+    //   { removeOnComplete: 500, removeOnFail: 500 },
+    // );
+    // await this.recordJobRun(userId, JOB_SCRAPE_SEARCH);
+    // return job;
   }
 
-  async enqueueAnalyzeLead(userId: string, leadId: string): Promise<void> {
-    await this.pipeline.add(
-      JOB_ANALYZE_LEAD,
-      { leadId, userId } satisfies AnalyzeLeadJobData,
-      { removeOnComplete: 500, removeOnFail: 500 },
-    );
+  async enqueueAnalyzeLead(_userId: string, _leadId: string): Promise<void> {
+    throw new HttpException("Async pipeline disabled. Use /explore/search", HttpStatus.NOT_IMPLEMENTED);
+
+    // TODO: re-enable when BullMQ pipeline is wired again
+    // await this.pipeline.add(
+    //   JOB_ANALYZE_LEAD,
+    //   { leadId, userId } satisfies AnalyzeLeadJobData,
+    //   { removeOnComplete: 500, removeOnFail: 500 },
+    // );
   }
 }

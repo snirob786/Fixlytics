@@ -1,22 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-
 import { useAuth } from "@/components/auth-provider";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ProtectedShell({ children }: { children: React.ReactNode }) {
-  const { ready, hydrated, user } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (ready && hydrated && !user) {
-      router.replace("/login");
-    }
-  }, [ready, hydrated, user, router]);
+  const { ready, hydrated } = useAuth();
 
   if (!ready || !hydrated) {
     return (
@@ -40,25 +28,6 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
             <Skeleton className="h-48 w-full max-w-3xl rounded-2xl" />
           </main>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <header className="border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl">
-          <div className="mx-auto flex h-10 max-w-5xl items-center justify-between">
-            <Skeleton className="h-6 w-24 rounded-md" />
-            <Skeleton className="h-8 w-20 rounded-md" />
-          </div>
-        </header>
-        <main className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-12 text-center">
-          <p className="text-sm text-muted-foreground">Redirecting to sign in…</p>
-          <Button asChild>
-            <Link href="/login">Go to login</Link>
-          </Button>
-        </main>
       </div>
     );
   }

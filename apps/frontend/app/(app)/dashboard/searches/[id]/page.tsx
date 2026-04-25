@@ -1,10 +1,10 @@
 "use client";
 
-import type { LeadListItem, Paginated, SavedSearchDetail } from "@fixlytics/types";
+import type { SavedSearchDetail } from "@fixlytics/types";
 import { ArrowLeft, Loader2, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   SearchRunStatusBadge,
@@ -28,129 +28,94 @@ import {
 import { ApiError } from "@/lib/api-client";
 import {
   searchesDelete,
-  searchesGet,
-  searchesGetStatus,
-  searchesListLeads,
   searchesRun,
   searchesUpdate,
-  type SearchRunItem,
 } from "@/lib/backend-api";
 import { formatDateTime } from "@/lib/format-date";
+import { useSearchDetail } from "@/hooks/use-search-detail";
+import { useSearchLeads } from "@/hooks/use-search-leads";
+import { useSearchStatus, isPollingStatus } from "@/hooks/use-search-status";
 import { hostnameFromUrl, isUnderperformingAvg } from "@/lib/lead-score";
 import { cn } from "@/lib/utils";
-
-const POLL_MS = 2500;
 
 export default function SearchDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
 
-  const [detail, setDetail] = useState<SavedSearchDetail | null>(null);
-  const [leads, setLeads] = useState<Paginated<LeadListItem> | null>(null);
-  const [latestRun, setLatestRun] = useState<SearchRunItem | null>(null);
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState<SavedSearchDetail["source"]>("GOOGLE");
-  const [error, setError] = useState<string | null>(null);
+  const [formDirty, setFormDirty] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [underperformingOnly, setUnderperformingOnly] = useState(false);
-
-  const refreshStatus = useCallback(async () => {
-    try {
-      const s = await searchesGetStatus(id);
-      setLatestRun(s.latestRun);
-    } catch {
-      /* ignore polling errors */
-    }
-  }, [id]);
-
-  const load = useCallback(
-    async (opts?: { preserveError?: boolean; silent?: boolean }) => {
-      if (!opts?.silent) setLoading(true);
-      if (!opts?.preserveError) setError(null);
-      try {
-        const [d, l, st] = await Promise.all([
-          searchesGet(id),
-          searchesListLeads(id, {
-            page: 1,
-            pageSize: 50,
-            underperformingOnly,
-          }),
-          searchesGetStatus(id),
-        ]);
-        setDetail(d);
-        setKeyword(d.keyword);
-        setLocation(d.location);
-        setSource(d.source);
-        setLeads(l);
-        setLatestRun(st.latestRun);
-      } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Failed to load search");
-      } finally {
-        if (!opts?.silent) setLoading(false);
-      }
-    },
-    [id, underperformingOnly],
-  );
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const detailState = useSearchDetail(id);
+  const statusState = useSearchStatus(id);
+  const leadsState = useSearchLeads(id, { underperformingOnly });
+  const detail = detailState.detail;
+  const leads = leadsState.leads;
+  const latestRun = statusState.latestRun;
+  const loading = detailState.loading || statusState.loading || leadsState.loading;
+  const error = actionError ?? detailState.error ?? statusState.error ?? leadsState.error;
 
   const uiStatus = useMemo(() => runToUiStatus(latestRun), [latestRun]);
 
   useEffect(() => {
-    if (!latestRun || (latestRun.status !== "QUEUED" && latestRun.status !== "RUNNING")) {
-      return;
-    }
-    const t = window.setInterval(() => {
-      void refreshStatus();
-      void load({ preserveError: true, silent: true });
-    }, POLL_MS);
-    return () => window.clearInterval(t);
-  }, [latestRun, load, refreshStatus]);
+    if (!detail) return;
+    setKeyword(detail.keyword);
+    setLocation(detail.location);
+    setSource(detail.source);
+    setFormDirty(false);
+  }, [detail]);
 
   const searchTitle = detail ? `${detail.keyword} · ${detail.location}` : "Search";
-  const pipelineRunning = uiStatus === "running";
+  const pipelineRunning = isPollingStatus(latestRun?.status);
+  const hasUnsavedChanges =
+    formDirty &&
+    (!!detail &&
+      (keyword !== detail.keyword || location !== detail.location || source !== detail.source));
+
+  async function saveSearchParams() {
+    if (!detail || !hasUnsavedChanges) return;
+    setBusy("save");
+    setActionError(null);
+    try {
+      await searchesUpdate(id, { keyword, location, source });
+      await detailState.fetchDetail();
+      setFormDirty(false);
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : "Could not save search parameters");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function runSearch() {
     if (!detail) return;
     setBusy("run");
-    setError(null);
-    try {
-      await searchesUpdate(id, { keyword, location, source });
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not save search parameters");
-      setBusy(null);
-      return;
-    }
+    setActionError(null);
     try {
       await searchesRun(id, false);
-      await refreshStatus();
+      await statusState.fetchStatus();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Could not start search run";
-      await load({ preserveError: true });
-      setError(
-        `${msg} Parameters were saved. If the job queue is disabled, set USE_JOB_QUEUE=true and REDIS_URL, then try again.`,
-      );
+      setActionError(msg);
       setBusy(null);
       return;
     }
-    await load();
+    await Promise.all([statusState.fetchStatus(), leadsState.fetchLeads(), detailState.fetchDetail()]);
     setBusy(null);
   }
 
   async function runPipelineResume() {
     setBusy("resume");
-    setError(null);
+    setActionError(null);
     try {
       await searchesRun(id, true);
-      await load();
-      await refreshStatus();
+      await Promise.all([statusState.fetchStatus(), leadsState.fetchLeads(), detailState.fetchDetail()]);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not enqueue job");
+      setActionError(e instanceof ApiError ? e.message : "Could not enqueue job");
     } finally {
       setBusy(null);
     }
@@ -161,12 +126,12 @@ export default function SearchDetailPage() {
     const ok = window.confirm("Delete this search and its cached pages, leads, and analyses?");
     if (!ok) return;
     setBusy("delete");
-    setError(null);
+    setActionError(null);
     try {
       await searchesDelete(id);
       router.push("/dashboard/searches");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not delete search");
+      setActionError(e instanceof ApiError ? e.message : "Could not delete search");
     } finally {
       setBusy(null);
     }
@@ -191,6 +156,22 @@ export default function SearchDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!!busy || !hasUnsavedChanges}
+            onClick={() => void saveSearchParams()}
+          >
+            {busy === "save" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -314,7 +295,10 @@ export default function SearchDetailPage() {
                   <Input
                     id="keyword"
                     value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
+                    onChange={(e) => {
+                      setKeyword(e.target.value);
+                      setFormDirty(true);
+                    }}
                     required
                   />
                 </div>
@@ -323,7 +307,10 @@ export default function SearchDetailPage() {
                   <Input
                     id="location"
                     value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                    onChange={(e) => {
+                      setLocation(e.target.value);
+                      setFormDirty(true);
+                    }}
                     required
                   />
                 </div>
@@ -333,7 +320,10 @@ export default function SearchDetailPage() {
                 <select
                   id="source"
                   value={source}
-                  onChange={(e) => setSource(e.target.value as SavedSearchDetail["source"])}
+                  onChange={(e) => {
+                    setSource(e.target.value as SavedSearchDetail["source"]);
+                    setFormDirty(true);
+                  }}
                   className={cn(
                     "flex h-10 w-full rounded-lg border border-input/90 bg-background/80 px-3 py-2 text-sm shadow-sm",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
@@ -344,6 +334,11 @@ export default function SearchDetailPage() {
                   <option value="DIRECTORY">Directory</option>
                 </select>
               </div>
+              {hasUnsavedChanges ? (
+                <p className="text-xs text-muted-foreground">
+                  You have unsaved parameter changes.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 

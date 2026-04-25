@@ -7,6 +7,7 @@ function apiBase(): string {
 }
 
 export async function middleware(request: NextRequest) {
+  const { pathname, origin } = request.nextUrl;
   const cookie = request.headers.get("cookie") ?? "";
   try {
     const res = await fetch(`${apiBase()}/auth/me`, {
@@ -14,17 +15,26 @@ export async function middleware(request: NextRequest) {
       headers: { cookie, accept: "application/json" },
       cache: "no-store",
     });
-    if (!res.ok) {
-      const login = new URL("/login", request.nextUrl.origin);
-      login.searchParams.set("from", request.nextUrl.pathname);
-      return NextResponse.redirect(login);
+    if (res.ok) {
+      if (pathname === "/login") {
+        return NextResponse.redirect(new URL("/dashboard", origin));
+      }
+      return NextResponse.next();
     }
+    const login = new URL("/login", origin);
+    if (pathname.startsWith("/dashboard") || pathname.startsWith("/results")) {
+      login.searchParams.set("from", pathname);
+    }
+    return NextResponse.redirect(login);
   } catch {
-    return NextResponse.redirect(new URL("/login", request.nextUrl.origin));
+    const login = new URL("/login", origin);
+    if (pathname.startsWith("/dashboard") || pathname.startsWith("/results")) {
+      login.searchParams.set("from", pathname);
+    }
+    return NextResponse.redirect(login);
   }
-  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/results", "/login"],
 };

@@ -20,6 +20,7 @@ import { RunSearchDto } from "./dto/run-search.dto";
 import { UpdateSearchDto } from "./dto/update-search.dto";
 import { SearchesService } from "./searches.service";
 
+/** Legacy saved-search + run APIs — kept for compatibility; primary UI flow uses `/explore/*`. */
 @Controller("searches")
 export class SearchesController {
   constructor(private readonly searches: SearchesService) {}

@@ -104,17 +104,20 @@ model Lead {
 }
 
 model Analysis {
-  id             String   @id @default(cuid())
-  leadId         String   @unique @map("lead_id")
-  userId         String   @map("user_id")
-  scrapedPayload Json     @map("scraped_payload")
-  rawMetrics     Json     @map("raw_metrics")
-  categoryScores Json     @map("category_scores")
-  checks         Json     @map("checks")
-  createdAt      DateTime @default(now()) @map("created_at")
-  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  leadId              String   @unique @map("lead_id")
+  userId              String   @map("user_id")
+  scrapedPayload      Json     @map("scraped_payload")
+  rawMetrics          Json     @map("raw_metrics")
+  categoryScores      Json     @map("category_scores")
+  checks              Json     @map("checks")
+  avgScore            Float?   @map("avg_score")
+  isUnderperforming   Boolean  @default(false) @map("is_underperforming")
+  createdAt           DateTime @default(now()) @map("created_at")
+  lead                Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([isUnderperforming])
 }
 
 model JobRun {

@@ -4,6 +4,7 @@ import type { Paginated, SavedSearchListItem } from "@fixlytics/types";
 import { ChevronLeft, ChevronRight, Plus, Search as SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { SearchRunStatusBadge, runToUiStatus } from "@/components/dashboard/search-run-status";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -19,17 +20,34 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
-import { searchesGetStatus, searchesList, type SearchRunItem } from "@/lib/backend-api";
+import { fetchSearchStatuses, searchesList, type SearchRunItem } from "@/lib/backend-api";
 import { formatRelativeShort } from "@/lib/format-date";
 
 const PAGE_SIZE = 10;
 
 export default function SearchesPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<Paginated<SavedSearchListItem> | null>(null);
   const [runById, setRunById] = useState<Record<string, SearchRunItem | null>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const page = useMemo(() => {
+    const raw = Number(searchParams.get("page") ?? "1");
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
+  }, [searchParams]);
+
+  const setPage = useCallback(
+    (nextPage: number) => {
+      const p = new URLSearchParams(searchParams.toString());
+      if (nextPage <= 1) p.delete("page");
+      else p.set("page", String(nextPage));
+      const qs = p.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [pathname, router, searchParams],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,14 +58,7 @@ export default function SearchesPage() {
         pageSize: PAGE_SIZE,
       });
       setData(res);
-      const statuses = await Promise.all(
-        res.items.map((s) =>
-          searchesGetStatus(s.id).then((r) => ({ id: s.id, latest: r.latestRun })),
-        ),
-      );
-      const map: Record<string, SearchRunItem | null> = {};
-      for (const { id, latest } of statuses) map[id] = latest;
-      setRunById(map);
+      setRunById(await fetchSearchStatuses(res.items.map((s) => s.id)));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load searches");
     } finally {
@@ -161,7 +172,7 @@ export default function SearchesPage() {
                   variant="outline"
                   size="sm"
                   disabled={page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => setPage(Math.max(1, page - 1))}
                 >
                   <ChevronLeft className="size-4" />
                   Previous
@@ -171,7 +182,7 @@ export default function SearchesPage() {
                   variant="outline"
                   size="sm"
                   disabled={page >= totalPages || loading}
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => setPage(page + 1)}
                   className="gap-1"
                 >
                   Next

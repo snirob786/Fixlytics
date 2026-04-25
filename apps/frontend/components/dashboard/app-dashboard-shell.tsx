@@ -1,23 +1,26 @@
 "use client";
 
-import { LayoutDashboard, LogOut, Menu, Search, Users, X } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, ScanSearch, Search, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { GlobalSearchBar } from "@/components/dashboard/global-search-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/results", label: "Workspace", icon: ScanSearch },
   { href: "/dashboard/searches", label: "Searches", icon: Search },
   { href: "/dashboard/leads", label: "Leads", icon: Users },
 ] as const;
 
 function titleFromPath(pathname: string): string {
   if (pathname === "/dashboard") return "Dashboard";
+  if (pathname === "/results") return "Results";
   if (pathname === "/dashboard/searches") return "Searches";
   if (pathname === "/dashboard/searches/new") return "Create search";
   if (pathname.startsWith("/dashboard/searches/")) return "Search";
@@ -87,7 +90,9 @@ export function AppDashboardShell({ children }: { children: React.ReactNode }) {
             const active =
               href === "/dashboard"
                 ? pathname === "/dashboard"
-                : pathname === href || pathname.startsWith(`${href}/`);
+                : href === "/results"
+                  ? pathname === "/results"
+                  : pathname === href || pathname.startsWith(`${href}/`);
             return (
               <Link
                 key={href}
@@ -145,6 +150,8 @@ export function AppDashboardShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+
+        <GlobalSearchBar />
 
         <div className="animate-fade-in flex-1">
           <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>

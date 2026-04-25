@@ -3,6 +3,7 @@ import { OnWorkerEvent, Processor, WorkerHost } from "@nestjs/bullmq";
 import type { Prisma } from "@prisma/client";
 import { SearchRunStatus } from "@prisma/client";
 import { Job } from "bullmq";
+import { UNDERPERFORMING_SCORE_THRESHOLD } from "../../common/constants/scoring";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AnalyzerService } from "../analyzer/analyzer.service";
 import { ScraperService } from "../scraper/scraper.service";
@@ -227,6 +228,9 @@ export class PipelineProcessor extends WorkerHost implements OnApplicationBootst
     };
 
     const { rawMetrics, categoryScores, checks } = this.analyzer.analyze(scrapedPayload, lead.url);
+    const avgScore =
+      (categoryScores.seo + categoryScores.performance + categoryScores.design) / 3;
+    const isUnderperforming = avgScore < UNDERPERFORMING_SCORE_THRESHOLD;
 
     await this.prisma.analysis.upsert({
       where: { leadId },
@@ -237,12 +241,16 @@ export class PipelineProcessor extends WorkerHost implements OnApplicationBootst
         rawMetrics: rawMetrics as Prisma.InputJsonValue,
         categoryScores: categoryScores as Prisma.InputJsonValue,
         checks: checks as Prisma.InputJsonValue,
+        avgScore,
+        isUnderperforming,
       },
       update: {
         scrapedPayload: scrapedPayload as Prisma.InputJsonValue,
         rawMetrics: rawMetrics as Prisma.InputJsonValue,
         categoryScores: categoryScores as Prisma.InputJsonValue,
         checks: checks as Prisma.InputJsonValue,
+        avgScore,
+        isUnderperforming,
       },
     });
   }

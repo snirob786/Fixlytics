@@ -3,6 +3,7 @@
 import type { LeadListItem, Paginated, SavedSearchListItem } from "@fixlytics/types";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -33,19 +34,50 @@ import { hostnameFromUrl, isUnderperformingAvg } from "@/lib/lead-score";
 const PAGE_SIZE = 25;
 
 export default function GlobalLeadsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [searches, setSearches] = useState<SavedSearchListItem[]>([]);
-  const [searchId, setSearchId] = useState<string>("all");
-  const [underperformingOnly, setUnderperformingOnly] = useState(false);
+  const searchId = useMemo(() => searchParams.get("searchId") ?? "all", [searchParams]);
+  const underperformingOnly = useMemo(
+    () => searchParams.get("underperformingOnly") === "true",
+    [searchParams],
+  );
+  const page = useMemo(() => {
+    const raw = Number(searchParams.get("page") ?? "1");
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
+  }, [searchParams]);
 
   const [globalItems, setGlobalItems] = useState<LeadGlobalListItem[]>([]);
   const [globalCursor, setGlobalCursor] = useState<string | null>(null);
   const [globalHasNext, setGlobalHasNext] = useState(false);
 
   const [pageData, setPageData] = useState<Paginated<LeadListItem> | null>(null);
-  const [page, setPage] = useState(1);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const setQueryState = useCallback(
+    (updates: { searchId?: string; underperformingOnly?: boolean; page?: number }) => {
+      const p = new URLSearchParams(searchParams.toString());
+      const nextSearchId = updates.searchId ?? searchId;
+      const nextUnderperforming = updates.underperformingOnly ?? underperformingOnly;
+      const nextPage = updates.page ?? page;
+
+      if (nextSearchId === "all") p.delete("searchId");
+      else p.set("searchId", nextSearchId);
+
+      if (nextUnderperforming) p.set("underperformingOnly", "true");
+      else p.delete("underperformingOnly");
+
+      if (nextPage <= 1) p.delete("page");
+      else p.set("page", String(nextPage));
+
+      const qs = p.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [page, pathname, router, searchId, searchParams, underperformingOnly],
+  );
 
   const searchLabel = useMemo(() => {
     if (searchId === "all") return null;
@@ -103,9 +135,7 @@ export default function GlobalLeadsPage() {
 
   useEffect(() => {
     if (searchId === "all") {
-      setPage(1);
       setPageData(null);
-      setUnderperformingOnly(false);
       void loadGlobal(null, false);
     } else {
       setGlobalItems([]);
@@ -148,8 +178,7 @@ export default function GlobalLeadsPage() {
               id="search-filter"
               value={searchId}
               onChange={(e) => {
-                setSearchId(e.target.value);
-                setPage(1);
+                setQueryState({ searchId: e.target.value, page: 1, underperformingOnly: false });
               }}
               className="flex h-10 w-full rounded-lg border border-input/90 bg-background/80 px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
             >
@@ -172,8 +201,7 @@ export default function GlobalLeadsPage() {
               checked={underperformingOnly}
               disabled={searchId === "all"}
               onChange={(e) => {
-                setUnderperformingOnly(e.target.checked);
-                setPage(1);
+                setQueryState({ underperformingOnly: e.target.checked, page: 1 });
               }}
             />
             Underperforming only
@@ -322,7 +350,7 @@ export default function GlobalLeadsPage() {
                       variant="outline"
                       size="sm"
                       disabled={page <= 1 || loading}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => setQueryState({ page: Math.max(1, page - 1) })}
                     >
                       <ChevronLeft className="size-4" />
                       Previous
@@ -332,7 +360,7 @@ export default function GlobalLeadsPage() {
                       variant="outline"
                       size="sm"
                       disabled={page >= totalPages || loading}
-                      onClick={() => setPage((p) => p + 1)}
+                      onClick={() => setQueryState({ page: page + 1 })}
                     >
                       Next
                       <ChevronRight className="size-4" />

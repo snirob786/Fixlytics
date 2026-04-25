@@ -36,7 +36,13 @@ export type LeadDetailResponseDto = {
 };
 
 type LeadListRow = Lead & {
-  analysis: { id: string; createdAt: Date; categoryScores: unknown } | null;
+  analysis: {
+    id: string;
+    createdAt: Date;
+    categoryScores: unknown;
+    avgScore: number | null;
+    isUnderperforming: boolean;
+  } | null;
 };
 
 export function toLeadListItemResponse(

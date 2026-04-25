@@ -191,6 +191,17 @@ export async function searchesGetStatus(
   return fetchJson<{ latestRun: SearchRunItem | null }>(`/searches/${id}/status`);
 }
 
+export async function fetchSearchStatuses(searchIds: string[]): Promise<Record<string, SearchRunItem | null>> {
+  const uniqueIds = Array.from(new Set(searchIds));
+  const entries = await Promise.all(
+    uniqueIds.map(async (id) => {
+      const status = await searchesGetStatus(id);
+      return [id, status.latestRun] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
 export type ListSearchRunsParams = {
   page?: number;
   pageSize?: number;
@@ -225,4 +236,70 @@ export async function leadsListGlobal(query?: {
 
 export async function leadsGet(id: string): Promise<LeadDetailResponse> {
   return fetchJson<LeadDetailResponse>(`/leads/${id}`);
+}
+
+// --- Explore (ephemeral workspace; no persistence until /explore/save) ---
+
+export type ExploreQueryMeta = {
+  keyword: string;
+  platform: SearchSource;
+  area: string;
+  tags: string[];
+};
+
+export type ExploreSearchBody = ExploreQueryMeta & {
+  limit?: number;
+};
+
+export type ExploreSearchResultItem = {
+  id: string;
+  title: string;
+  url: string;
+  platform: string;
+  tags: string[];
+  scores: { seo: number; performance: number; design: number };
+  avgScore: number;
+};
+
+export type ExploreSearchResponse = {
+  queryMeta: ExploreQueryMeta;
+  thresholdDefault: number;
+  items: ExploreSearchResultItem[];
+};
+
+export async function exploreSearch(body: ExploreSearchBody): Promise<ExploreSearchResponse> {
+  return fetchJson<ExploreSearchResponse>("/explore/search", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export type ExploreSaveSelectedItem = {
+  id: string;
+  title: string;
+  url: string;
+  scores: { seo: number; performance: number; design: number };
+  avgScore: number;
+};
+
+export type ExploreSaveBody = {
+  queryMeta: ExploreQueryMeta;
+  selectedItems: ExploreSaveSelectedItem[];
+};
+
+export async function exploreSave(body: ExploreSaveBody): Promise<{ searchId: string; savedCount: number }> {
+  return fetchJson<{ searchId: string; savedCount: number }>("/explore/save", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export type ExploreConfigResponse = {
+  platforms: SearchSource[];
+  maxLimit: number;
+  defaultThreshold: number;
+};
+
+export async function exploreConfig(): Promise<ExploreConfigResponse> {
+  return fetchJson<ExploreConfigResponse>("/explore/config");
 }

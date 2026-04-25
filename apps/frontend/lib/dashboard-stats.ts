@@ -9,6 +9,27 @@ export type DashboardStats = {
   recentSearches: SavedSearchListItem[];
 };
 
+type DashboardStatsInput = {
+  searches: SavedSearchListItem[];
+  totalSearches: number;
+  underperformingLeads: number;
+};
+
+export function buildDashboardStats(input: DashboardStatsInput): DashboardStats {
+  const totalLeads = input.searches.reduce((sum, s) => sum + s.leadCount, 0);
+  const recentSearches = input.searches
+    .slice()
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5);
+
+  return {
+    totalSearches: input.totalSearches,
+    totalLeads,
+    underperformingLeads: input.underperformingLeads,
+    recentSearches,
+  };
+}
+
 /**
  * Aggregates dashboard metrics using existing list endpoints (no new backend routes).
  */
@@ -17,16 +38,12 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   let page = 1;
   const all: SavedSearchListItem[] = [];
   let totalSearches = 0;
-  let totalLeads = 0;
   let underperformingLeads = 0;
 
   for (;;) {
     const batch = await searchesList({ page, pageSize });
     if (page === 1) totalSearches = batch.total;
     all.push(...batch.items);
-    for (const s of batch.items) {
-      totalLeads += s.leadCount;
-    }
     if (batch.items.length) {
       const counts = await Promise.all(
         batch.items.map((s) =>
@@ -41,10 +58,9 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     page += 1;
   }
 
-  const recentSearches = all
-    .slice()
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 5);
-
-  return { totalSearches, totalLeads, underperformingLeads, recentSearches };
+  return buildDashboardStats({
+    searches: all,
+    totalSearches,
+    underperformingLeads,
+  });
 }

@@ -1,4 +1,4 @@
-import { HttpException } from "@nestjs/common";
+import { HttpException, HttpStatus } from "@nestjs/common";
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -6,10 +6,10 @@ import { PIPELINE_QUEUE } from "./pipeline.constants";
 import { PipelineJobsService } from "./pipeline-jobs.service";
 
 describe("PipelineJobsService", () => {
-  it("blocks user-triggered scrapes when the daily quota is exhausted", async () => {
+  it("enqueueScrapeSearch is disabled (501) while async pipeline is off", async () => {
     const prisma = {
       jobRun: {
-        count: jest.fn().mockResolvedValue(100),
+        count: jest.fn(),
       },
     };
     const queue = { add: jest.fn() };
@@ -23,13 +23,12 @@ describe("PipelineJobsService", () => {
     }).compile();
 
     const service = moduleRef.get(PipelineJobsService);
-    try {
-      await service.enqueueScrapeSearch("u1", "s1", true, `c${"a".repeat(24)}`);
-      throw new Error("expected HttpException");
-    } catch (e) {
-      expect(e).toBeInstanceOf(HttpException);
-      expect((e as HttpException).getStatus()).toBe(429);
-    }
+    const err = await service
+      .enqueueScrapeSearch("u1", "s1", true, `c${"a".repeat(24)}`)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HttpException);
+    expect((err as HttpException).getStatus()).toBe(HttpStatus.NOT_IMPLEMENTED);
     expect(queue.add).not.toHaveBeenCalled();
+    expect(prisma.jobRun.count).not.toHaveBeenCalled();
   });
 });

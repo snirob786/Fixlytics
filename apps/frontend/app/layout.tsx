@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 
 import { AuthProvider } from "@/components/auth-provider";
+import { AuthReduxSync } from "@/components/providers/auth-redux-sync";
+import { StoreProvider } from "@/components/providers/store-provider";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -23,7 +25,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`min-h-screen font-sans ${outfit.variable}`}>
-        <AuthProvider>{children}</AuthProvider>
+        <StoreProvider>
+          <AuthProvider>
+            <AuthReduxSync />
+            {children}
+          </AuthProvider>
+        </StoreProvider>
       </body>
     </html>
   );
