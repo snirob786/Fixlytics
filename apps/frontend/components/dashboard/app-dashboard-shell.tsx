@@ -13,14 +13,14 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/results", label: "Workspace", icon: ScanSearch },
+  { href: "/search", label: "Search", icon: ScanSearch },
   { href: "/dashboard/searches", label: "Searches", icon: Search },
   { href: "/dashboard/leads", label: "Leads", icon: Users },
 ] as const;
 
 function titleFromPath(pathname: string): string {
   if (pathname === "/dashboard") return "Dashboard";
-  if (pathname === "/results") return "Results";
+  if (pathname === "/search") return "Search";
   if (pathname === "/dashboard/searches") return "Searches";
   if (pathname === "/dashboard/searches/new") return "Create search";
   if (pathname.startsWith("/dashboard/searches/")) return "Search";
@@ -90,8 +90,8 @@ export function AppDashboardShell({ children }: { children: React.ReactNode }) {
             const active =
               href === "/dashboard"
                 ? pathname === "/dashboard"
-                : href === "/results"
-                  ? pathname === "/results"
+                : href === "/search"
+                  ? pathname === "/search"
                   : pathname === href || pathname.startsWith(`${href}/`);
             return (
               <Link

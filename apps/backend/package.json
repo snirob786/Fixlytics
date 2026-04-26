@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "dev": "pnpm run dev:compile-once && concurrently --kill-others-on-fail -n compile,api -c cyan,green \"pnpm run dev:compile\" \"pnpm run dev:serve\"",
     "dev:compile-once": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "dev:compile": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",

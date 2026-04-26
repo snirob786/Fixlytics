@@ -303,3 +303,40 @@ export type ExploreConfigResponse = {
 export async function exploreConfig(): Promise<ExploreConfigResponse> {
   return fetchJson<ExploreConfigResponse>("/explore/config");
 }
+
+export type PipelineSearchRequest = {
+  keyword: string;
+  area: string;
+  platform: string;
+  intent?: string;
+  country?: string;
+};
+
+export type PipelineSearchResultItem = {
+  businessId: string | null;
+  businessName: string;
+  domain: string;
+  link: string;
+  snippet: string;
+  contacts: Array<{ type: string; value: string }>;
+  socialProfiles: Array<{ platform: string; url: string }>;
+  score: number;
+};
+
+export type PipelineSearchResponse = {
+  hash: string;
+  status: "ready" | "processing";
+  data: PipelineSearchResultItem[];
+  meta: { score: number; totalResults: number };
+};
+
+export async function runPipelineSearch(body: PipelineSearchRequest): Promise<PipelineSearchResponse> {
+  return fetchJson<PipelineSearchResponse>("/search", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getPipelineSearch(hash: string): Promise<PipelineSearchResponse> {
+  return fetchJson<PipelineSearchResponse>(`/search/${hash}`);
+}

@@ -2,7 +2,10 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 function apiBase(): string {
-  const url = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+  const url =
+    process.env.NEXT_INTERNAL_API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:4000/api/v1";
   return url.replace(/\/$/, "");
 }
 

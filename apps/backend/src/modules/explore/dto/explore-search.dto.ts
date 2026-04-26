@@ -1,9 +1,9 @@
-import { SearchSource } from "@prisma/client";
+import type { SearchSource } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +13,8 @@ import {
   MinLength,
 } from "class-validator";
 
+const SEARCH_SOURCE_VALUES = ["GOOGLE", "MAPS", "DIRECTORY"] as const;
+
 /** Sync explore search (ephemeral — nothing persisted). */
 export class ExploreSearchDto {
   @IsString()
@@ -20,7 +22,7 @@ export class ExploreSearchDto {
   @MaxLength(200)
   keyword!: string;
 
-  @IsEnum(SearchSource)
+  @IsIn(SEARCH_SOURCE_VALUES)
   platform!: SearchSource;
 
   @IsString()

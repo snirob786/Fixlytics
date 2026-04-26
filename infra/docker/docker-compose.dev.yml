@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fixlytics-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fixlytics}
+      POSTGRES_USER: ${POSTGRES_USER:-fixlytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fixlytics}
+    ports:
+      - "5432:5432"
+    volumes:
+      - fixlytics-postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixlytics -d fixlytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: fixlytics-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - fixlytics-redis-dev-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: node:20-alpine
+    container_name: fixlytics-backend-dev
+    working_dir: /workspace
+    restart: unless-stopped
+    env_file:
+      - ../../apps/backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CI: "true"
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fixlytics}:${POSTGRES_PASSWORD:-fixlytics}@postgres:5432/${POSTGRES_DB:-fixlytics}
+      REDIS_URL: redis://redis:6379
+      FRONTEND_ORIGIN: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret-before-prod}
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_EXPIRES_DAYS: "7"
+    command: >
+      sh -c "corepack enable &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @fixlytics/backend db:generate &&
+      pnpm --filter @fixlytics/backend db:migrate &&
+      pnpm --filter @fixlytics/backend dev"
+    volumes:
+      - ../../:/workspace
+      - fixlytics-dev-backend-root-node-modules:/workspace/node_modules
+      - fixlytics-dev-backend-node-modules:/workspace/apps/backend/node_modules
+    ports:
+      - "4000:4000"
+
+  frontend:
+    image: node:20-alpine
+    container_name: fixlytics-frontend-dev
+    working_dir: /workspace
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      CI: "true"
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_INTERNAL_API_URL: http://backend:4000/api/v1
+    command: >
+      sh -c "corepack enable &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @fixlytics/frontend exec next dev --hostname 0.0.0.0 --port 3000"
+    volumes:
+      - ../../:/workspace
+      - fixlytics-dev-frontend-root-node-modules:/workspace/node_modules
+      - fixlytics-dev-frontend-node-modules:/workspace/apps/frontend/node_modules
+    ports:
+      - "3000:3000"
+
+volumes:
+  fixlytics-postgres-dev-data:
+  fixlytics-redis-dev-data:
+  fixlytics-dev-backend-root-node-modules:
+  fixlytics-dev-frontend-root-node-modules:
+  fixlytics-dev-backend-node-modules:
+  fixlytics-dev-frontend-node-modules:

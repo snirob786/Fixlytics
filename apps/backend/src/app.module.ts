@@ -17,8 +17,10 @@ import { ExploreModule } from "./modules/explore/explore.module";
 // import { PipelineModule } from "./modules/jobs/pipeline.module";
 import { LeadsModule } from "./modules/leads/leads.module";
 import { SearchesModule } from "./modules/searches/searches.module";
+import { SearchModule } from "./modules/search/search.module";
 import { UsersModule } from "./modules/users/users.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { QueueModule } from "./modules/queue/queue.module";
 
 @Module({
   imports: [
@@ -33,8 +35,10 @@ import { PrismaModule } from "./prisma/prisma.module";
     UsersModule,
     AuthModule,
     ExploreModule,
+    SearchModule,
     SearchesModule,
     LeadsModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [

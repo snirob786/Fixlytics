@@ -1,6 +1,7 @@
-import { SearchSource } from "@prisma/client";
-import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsEnum, IsString, MaxLength, MinLength } from "class-validator";
+import type { SearchSource } from "@prisma/client";
+import { ArrayMaxSize, IsArray, IsIn, IsString, MaxLength, MinLength } from "class-validator";
+
+const SEARCH_SOURCE_VALUES = ["GOOGLE", "MAPS", "DIRECTORY"] as const;
 
 /** Echoed on search responses and required on save (workspace query context). */
 export class ExploreQueryMetaDto {
@@ -9,7 +10,7 @@ export class ExploreQueryMetaDto {
   @MaxLength(200)
   keyword!: string;
 
-  @IsEnum(SearchSource)
+  @IsIn(SEARCH_SOURCE_VALUES)
   platform!: SearchSource;
 
   @IsString()

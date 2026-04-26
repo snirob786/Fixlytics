@@ -129,3 +129,106 @@ model JobRun {
 
   @@index([userId, createdAt])
 }
+
+enum SearchPipelineStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ContactType {
+  EMAIL
+  PHONE
+  WHATSAPP
+}
+
+model Search {
+  id            String               @id @default(cuid())
+  hash          String               @unique
+  keyword       String
+  area          String
+  country       String?
+  platform      String
+  intent        String?
+  status        SearchPipelineStatus @default(PROCESSING)
+  error         String?
+  createdAt     DateTime             @default(now()) @map("created_at")
+  lastFetchedAt DateTime?            @map("last_fetched_at")
+  results       SearchResult[]
+
+  @@index([createdAt])
+  @@index([lastFetchedAt])
+}
+
+model SearchResult {
+  id        String   @id @default(cuid())
+  searchId  String   @map("search_id")
+  title     String
+  link      String
+  snippet   String
+  position  Int
+  domainId  String   @map("domain_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  search    Search   @relation(fields: [searchId], references: [id], onDelete: Cascade)
+
+  @@unique([searchId, link])
+  @@index([searchId, position])
+  @@index([domainId])
+}
+
+model Domain {
+  id            String         @id @default(cuid())
+  domain        String         @unique
+  rootDomain    String         @map("root_domain")
+  firstSeenAt   DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt    DateTime       @default(now()) @map("last_seen_at")
+  categories    Json?
+  locations     Json?
+  business      Business?
+  searchResults SearchResult[]
+
+  @@index([rootDomain])
+  @@index([lastSeenAt])
+}
+
+model Business {
+  id              String          @id @default(cuid())
+  name            String
+  domainId        String          @unique @map("domain_id")
+  category        String?
+  location        String?
+  confidenceScore Int             @default(0) @map("confidence_score")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  contacts        Contact[]
+  domain          Domain          @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  socialProfiles  SocialProfile[]
+
+  @@index([confidenceScore])
+}
+
+model Contact {
+  id         String      @id @default(cuid())
+  businessId String      @map("business_id")
+  type       ContactType
+  value      String
+  source     String
+  createdAt  DateTime    @default(now()) @map("created_at")
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, type, value])
+  @@index([businessId])
+}
+
+model SocialProfile {
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  platform   String
+  url        String
+  createdAt  DateTime @default(now()) @map("created_at")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, url])
+  @@index([businessId])
+}

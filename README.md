@@ -145,6 +145,23 @@ pnpm --filter @fixlytics/frontend dev
 
 The backend `dev` script uses **TypeScript watch** plus **nodemon** (see `apps/backend/nodemon.json`) instead of `nest start --watch`, so local development stays reliable on **Windows paths that contain spaces** and avoids stale incremental builds that skip emitting to `dist/`.
 
+### Run with Docker
+
+Run the full system (Postgres + Redis + backend + frontend) with Docker Compose:
+
+```bash
+cp infra/docker/.env.example infra/docker/.env
+pnpm docker:up
+```
+
+Useful commands:
+
+```bash
+pnpm docker:ps
+pnpm docker:logs
+pnpm docker:down
+```
+
 ### Environment files
 
 Copy the example env files and adjust values:

@@ -3,10 +3,16 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "pnpm --parallel --filter @fixlytics/backend --filter @fixlytics/frontend dev",
+    "dev": "docker compose -f infra/docker/docker-compose.dev.yml up --build",
+    "start": "docker compose -f infra/docker/docker-compose.yml up -d --build",
+    "logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "test": "pnpm --filter @fixlytics/backend test"
+    "test": "pnpm --filter @fixlytics/backend test",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
+    "docker:ps": "docker compose -f infra/docker/docker-compose.yml ps"
   },
   "engines": {
     "node": ">=20"

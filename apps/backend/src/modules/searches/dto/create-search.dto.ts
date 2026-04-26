@@ -1,5 +1,7 @@
-import { SearchSource } from "@prisma/client";
-import { IsEnum, IsString, MaxLength, MinLength } from "class-validator";
+import type { SearchSource } from "@prisma/client";
+import { IsIn, IsString, MaxLength, MinLength } from "class-validator";
+
+const SEARCH_SOURCE_VALUES = ["GOOGLE", "MAPS", "DIRECTORY"] as const;
 
 export class CreateSearchDto {
   @IsString()
@@ -12,6 +14,6 @@ export class CreateSearchDto {
   @MaxLength(200)
   location!: string;
 
-  @IsEnum(SearchSource)
+  @IsIn(SEARCH_SOURCE_VALUES)
   source!: SearchSource;
 }
