@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
-type PollState = "loading" | "processing" | "ready";
+type PollState = "loading" | "processing" | "ready" | "failed";
+const POLL_INTERVAL_MS = 2500;
+const MAX_POLL_MS = 120000;
 
 export default function SearchPage() {
   const params = useSearchParams();
@@ -24,9 +26,20 @@ export default function SearchPage() {
   const [selected, setSelected] = useState<PipelineSearchResultItem | null>(null);
 
   useEffect(() => {
-    if (!hash) return;
+    if (!hash) {
+      setResults([]);
+      setSelected(null);
+      setState("failed");
+      setError("Missing search hash.");
+      return;
+    }
+    setState("loading");
+    setError(null);
+    setResults([]);
+    setSelected(null);
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const startedAt = Date.now();
 
     const run = async () => {
       try {
@@ -34,13 +47,26 @@ export default function SearchPage() {
         if (!alive) return;
         setResults(res.data);
         if (res.status === "ready") {
+          setError(null);
           setState("ready");
           return;
         }
+        if (res.status === "failed") {
+          setState("failed");
+          setError(res.error ?? "Search processing failed");
+          return;
+        }
+        if (Date.now() - startedAt >= MAX_POLL_MS) {
+          setState("failed");
+          setError("Search is taking too long. Please try again.");
+          return;
+        }
         setState("processing");
-        timer = setTimeout(() => void run(), 2500);
+        timer = setTimeout(() => void run(), POLL_INTERVAL_MS);
       } catch (e) {
         if (!alive) return;
+        setResults([]);
+        setState("failed");
         setError(e instanceof ApiError ? e.message : "Search polling failed");
       }
     };
@@ -70,7 +96,7 @@ export default function SearchPage() {
         <p className="text-sm text-muted-foreground">Hash: {hash || "N/A"}</p>
       </div>
 
-      {state !== "ready" ? (
+      {state !== "ready" && state !== "failed" ? (
         <Card>
           <CardContent className="flex items-center gap-3 py-8 text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />

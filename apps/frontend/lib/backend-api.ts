@@ -325,9 +325,10 @@ export type PipelineSearchResultItem = {
 
 export type PipelineSearchResponse = {
   hash: string;
-  status: "ready" | "processing";
+  status: "ready" | "processing" | "failed";
   data: PipelineSearchResultItem[];
   meta: { score: number; totalResults: number };
+  error?: string;
 };
 
 export async function runPipelineSearch(body: PipelineSearchRequest): Promise<PipelineSearchResponse> {

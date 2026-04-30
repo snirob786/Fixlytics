@@ -61,14 +61,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    authRequestGen.current += 1;
+    setUser(null);
+    setHydrated(true);
+
+    const redirectToLogin = () => {
+      if (typeof window !== "undefined" && window.location.pathname !== "/") {
+        window.location.replace("/");
+      }
+    };
+
+    const fallbackTimer =
+      typeof window !== "undefined" ? window.setTimeout(redirectToLogin, 1200) : null;
+
     try {
       await authLogout({});
     } catch {
       // still clear local session
+    } finally {
+      if (typeof window !== "undefined" && fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+      }
+      redirectToLogin();
     }
-    authRequestGen.current += 1;
-    setUser(null);
-    setHydrated(true);
   }, []);
 
   const value = useMemo(

@@ -1,10 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { SearchPipelineStatus } from "@prisma/client";
 import { createHash } from "crypto";
-import Redis from "ioredis";
 import { SearchPipelineConfigService } from "../../config/search-pipeline.config";
 import { PrismaService } from "../../prisma/prisma.service";
-import { QueueService } from "../queue/queue.service";
+import { DomainService } from "../domain/domain.service";
+import { GoogleService } from "../google/google.service";
+import { ParserService } from "../parser/parser.service";
 import type { SearchRequestDto } from "./dto/search-request.dto";
 
 type NormalizedInput = {
@@ -17,15 +18,15 @@ type NormalizedInput = {
 
 @Injectable()
 export class SearchService {
-  private readonly redis: Redis;
+  private readonly logger = new Logger(SearchService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly queueService: QueueService,
     private readonly cfg: SearchPipelineConfigService,
-  ) {
-    this.redis = new Redis(this.cfg.redisUrl, { maxRetriesPerRequest: 2 });
-  }
+    private readonly google: GoogleService,
+    private readonly parser: ParserService,
+    private readonly domainService: DomainService,
+  ) {}
 
   normalizeInput(input: SearchRequestDto): NormalizedInput {
     const platformSynonyms: Record<string, string> = {
@@ -105,16 +106,6 @@ export class SearchService {
   }
 
   async getByHash(hash: string) {
-    const redisKey = `search:${hash}`;
-    const cached = await this.redis.get(redisKey);
-    if (cached) {
-      return JSON.parse(cached) as {
-        status: "ready" | "processing";
-        data: unknown[];
-        meta: { score: number; totalResults: number };
-      };
-    }
-
     const row = await this.prisma.search.findUnique({
       where: { hash },
       include: {
@@ -133,29 +124,30 @@ export class SearchService {
       },
     });
 
-    if (!row || row.status !== SearchPipelineStatus.READY) {
+    if (!row) {
       return { status: "processing" as const, data: [], meta: { score: 0, totalResults: 0 } };
     }
 
-    const ready = this.mapReady(row);
-    await this.redis.set(
-      redisKey,
-      JSON.stringify(ready),
-      "EX",
-      this.cfg.searchCacheTtlDays * 24 * 60 * 60,
-    );
-    return ready;
+    if (row.status === SearchPipelineStatus.FAILED) {
+      return {
+        status: "failed" as const,
+        data: [],
+        meta: { score: 0, totalResults: 0 },
+        error: row.error ?? "Search processing failed",
+      };
+    }
+
+    if (row.status !== SearchPipelineStatus.READY) {
+      return { status: "processing" as const, data: [], meta: { score: 0, totalResults: 0 } };
+    }
+
+    return this.mapReady(row);
   }
 
   async search(input: SearchRequestDto) {
     const normalized = this.normalizeInput(input);
     const hash = this.generateHash(normalized);
-    const redisKey = `search:${hash}`;
-
-    const redisHit = await this.redis.get(redisKey);
-    if (redisHit) {
-      return JSON.parse(redisHit);
-    }
+    this.logger.log(`search_start hash=${hash} keyword="${normalized.keyword}" area="${normalized.area}" platform="${normalized.platform}"`);
 
     const existing = await this.prisma.search.findUnique({
       where: { hash },
@@ -168,6 +160,7 @@ export class SearchService {
       existing.status === SearchPipelineStatus.READY;
 
     if (dbFresh) {
+      this.logger.log(`search_cache_hit hash=${hash} source=db`);
       return this.getByHash(hash);
     }
 
@@ -189,16 +182,55 @@ export class SearchService {
       select: { id: true },
     });
 
-    const candidates = this.expandQuery(normalized);
-    await this.queueService.enqueueSearch({
-      searchId: search.id,
-      hash,
-      query: candidates[0],
-      platform: normalized.platform,
-      area: normalized.area,
-      keyword: normalized.keyword,
-    });
+    const [query] = this.expandQuery(normalized);
+    this.logger.log(`search_google_request hash=${hash} query="${query}"`);
 
-    return { hash, status: "processing" as const, data: [], meta: { score: 0, totalResults: 0 } };
+    try {
+      const response = await this.google.search(query, {
+        platform: normalized.platform,
+        area: normalized.area,
+      });
+      const parsed = this.parser.parseGoogle(response.items ?? []);
+      this.logger.log(`search_google_response hash=${hash} rawItems=${response.items?.length ?? 0} parsedItems=${parsed.length}`);
+
+      await this.prisma.searchResult.deleteMany({ where: { searchId: search.id } });
+      for (const item of parsed) {
+        const domain = await this.domainService.upsertDomain(item.domain, item.rootDomain);
+        await this.prisma.searchResult.create({
+          data: {
+            searchId: search.id,
+            title: item.title,
+            link: item.link,
+            snippet: item.snippet,
+            position: item.position,
+            domainId: domain.id,
+          },
+        });
+      }
+
+      await this.prisma.search.update({
+        where: { id: search.id },
+        data: {
+          status: SearchPipelineStatus.READY,
+          error: null,
+          lastFetchedAt: new Date(),
+        },
+      });
+
+      this.logger.log(`search_ready hash=${hash} persistedItems=${parsed.length}`);
+      return this.getByHash(hash);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message.slice(0, 500) : "search processing failed";
+      await this.prisma.search.update({
+        where: { id: search.id },
+        data: {
+          status: SearchPipelineStatus.FAILED,
+          error: message,
+        },
+      });
+      this.logger.error(`search_failed hash=${hash} error=${message}`);
+      return { hash, status: "failed" as const, data: [], meta: { score: 0, totalResults: 0 }, error: message };
+    }
   }
 }

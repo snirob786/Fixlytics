@@ -47,6 +47,10 @@ services:
       CI: "true"
       NODE_ENV: development
       PORT: 4000
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
+      TSC_WATCHFILE: UseFsEventsWithFallbackDynamicPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
       DATABASE_URL: postgresql://${POSTGRES_USER:-fixlytics}:${POSTGRES_PASSWORD:-fixlytics}@postgres:5432/${POSTGRES_DB:-fixlytics}
       REDIS_URL: redis://redis:6379
       FRONTEND_ORIGIN: http://localhost:3000
@@ -77,6 +81,9 @@ services:
     environment:
       CI: "true"
       NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
+      WATCHPACK_POLLING: "true"
       NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
       NEXT_INTERNAL_API_URL: http://backend:4000/api/v1
     command: >
